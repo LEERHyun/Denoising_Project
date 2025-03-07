@@ -5,6 +5,7 @@ from arch_util import LayerNorm2d
 from local_arch import Local_Base
 
 from einops import rearrange
+import torchsummary
 
 #---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #Restormer Module
@@ -139,7 +140,136 @@ class TransformerBlock(nn.Module):
         x = x + self.ffn(self.norm2(x))
 
         return x
+    
+##########################################################################
+## Resizing modules
+class Downsample(nn.Module):
+    def __init__(self, n_feat):
+        super(Downsample, self).__init__()
 
+        self.body = nn.Sequential(nn.Conv2d(n_feat, n_feat//2, kernel_size=3, stride=1, padding=1, bias=False),
+                                  nn.PixelUnshuffle(2))
+
+    def forward(self, x):
+        return self.body(x)
+
+class Upsample(nn.Module):
+    def __init__(self, n_feat):
+        super(Upsample, self).__init__()
+
+        self.body = nn.Sequential(nn.Conv2d(n_feat, n_feat*2, kernel_size=3, stride=1, padding=1, bias=False),
+                                  nn.PixelShuffle(2))
+
+    def forward(self, x):
+        return self.body(x)
+    
+##########################################################################
+## Overlapped image patch embedding with 3x3 Conv
+class OverlapPatchEmbed(nn.Module):
+    def __init__(self, in_c=3, embed_dim=48, bias=False):
+        super(OverlapPatchEmbed, self).__init__()
+
+        self.proj = nn.Conv2d(in_c, embed_dim, kernel_size=3, stride=1, padding=1, bias=bias)
+
+    def forward(self, x):
+        x = self.proj(x)
+
+        return x
+    
+    
+##---------- Restormer -----------------------
+class Restormer(nn.Module):
+    def __init__(self, 
+        inp_channels=3, 
+        out_channels=3, 
+        dim = 48,
+        num_blocks = [4,6,6,8],  
+        num_refinement_blocks = 4,
+        heads = [1,2,4,8],
+        ffn_expansion_factor = 2.66,
+        bias = False,
+        LayerNorm_type = 'WithBias',   ## Other option 'BiasFree'
+        dual_pixel_task = False        ## True for dual-pixel defocus deblurring only. Also set inp_channels=6
+    ):
+
+        super(Restormer, self).__init__()
+
+        self.patch_embed = OverlapPatchEmbed(inp_channels, dim)
+
+        self.encoder_level1 = nn.Sequential(*[TransformerBlock(dim=dim, num_heads=heads[0], ffn_expansion_factor=ffn_expansion_factor, bias=bias, LayerNorm_type=LayerNorm_type) for i in range(num_blocks[0])])
+        
+        self.down1_2 = Downsample(dim) ## From Level 1 to Level 2
+        self.encoder_level2 = nn.Sequential(*[TransformerBlock(dim=int(dim*2**1), num_heads=heads[1], ffn_expansion_factor=ffn_expansion_factor, bias=bias, LayerNorm_type=LayerNorm_type) for i in range(num_blocks[1])])
+        
+        self.down2_3 = Downsample(int(dim*2**1)) ## From Level 2 to Level 3
+        self.encoder_level3 = nn.Sequential(*[TransformerBlock(dim=int(dim*2**2), num_heads=heads[2], ffn_expansion_factor=ffn_expansion_factor, bias=bias, LayerNorm_type=LayerNorm_type) for i in range(num_blocks[2])])
+
+        self.down3_4 = Downsample(int(dim*2**2)) ## From Level 3 to Level 4
+        self.latent = nn.Sequential(*[TransformerBlock(dim=int(dim*2**3), num_heads=heads[3], ffn_expansion_factor=ffn_expansion_factor, bias=bias, LayerNorm_type=LayerNorm_type) for i in range(num_blocks[3])])
+        
+        self.up4_3 = Upsample(int(dim*2**3)) ## From Level 4 to Level 3
+        self.reduce_chan_level3 = nn.Conv2d(int(dim*2**3), int(dim*2**2), kernel_size=1, bias=bias)
+        self.decoder_level3 = nn.Sequential(*[TransformerBlock(dim=int(dim*2**2), num_heads=heads[2], ffn_expansion_factor=ffn_expansion_factor, bias=bias, LayerNorm_type=LayerNorm_type) for i in range(num_blocks[2])])
+
+
+        self.up3_2 = Upsample(int(dim*2**2)) ## From Level 3 to Level 2
+        self.reduce_chan_level2 = nn.Conv2d(int(dim*2**2), int(dim*2**1), kernel_size=1, bias=bias)
+        self.decoder_level2 = nn.Sequential(*[TransformerBlock(dim=int(dim*2**1), num_heads=heads[1], ffn_expansion_factor=ffn_expansion_factor, bias=bias, LayerNorm_type=LayerNorm_type) for i in range(num_blocks[1])])
+        
+        self.up2_1 = Upsample(int(dim*2**1))  ## From Level 2 to Level 1  (NO 1x1 conv to reduce channels)
+
+        self.decoder_level1 = nn.Sequential(*[TransformerBlock(dim=int(dim*2**1), num_heads=heads[0], ffn_expansion_factor=ffn_expansion_factor, bias=bias, LayerNorm_type=LayerNorm_type) for i in range(num_blocks[0])])
+        
+        self.refinement = nn.Sequential(*[TransformerBlock(dim=int(dim*2**1), num_heads=heads[0], ffn_expansion_factor=ffn_expansion_factor, bias=bias, LayerNorm_type=LayerNorm_type) for i in range(num_refinement_blocks)])
+        
+        #### For Dual-Pixel Defocus Deblurring Task ####
+        self.dual_pixel_task = dual_pixel_task
+        if self.dual_pixel_task:
+            self.skip_conv = nn.Conv2d(dim, int(dim*2**1), kernel_size=1, bias=bias)
+        ###########################
+            
+        self.output = nn.Conv2d(int(dim*2**1), out_channels, kernel_size=3, stride=1, padding=1, bias=bias)
+
+    def forward(self, inp_img):
+
+        inp_enc_level1 = self.patch_embed(inp_img)
+        out_enc_level1 = self.encoder_level1(inp_enc_level1)
+        
+        inp_enc_level2 = self.down1_2(out_enc_level1)
+        out_enc_level2 = self.encoder_level2(inp_enc_level2)
+
+        inp_enc_level3 = self.down2_3(out_enc_level2)
+        out_enc_level3 = self.encoder_level3(inp_enc_level3) 
+
+        inp_enc_level4 = self.down3_4(out_enc_level3)        
+        latent = self.latent(inp_enc_level4) 
+                        
+        inp_dec_level3 = self.up4_3(latent)
+        inp_dec_level3 = torch.cat([inp_dec_level3, out_enc_level3], 1)
+        inp_dec_level3 = self.reduce_chan_level3(inp_dec_level3)
+        out_dec_level3 = self.decoder_level3(inp_dec_level3) 
+
+        inp_dec_level2 = self.up3_2(out_dec_level3)
+        inp_dec_level2 = torch.cat([inp_dec_level2, out_enc_level2], 1)
+        inp_dec_level2 = self.reduce_chan_level2(inp_dec_level2)
+        out_dec_level2 = self.decoder_level2(inp_dec_level2) 
+
+        inp_dec_level1 = self.up2_1(out_dec_level2)
+        inp_dec_level1 = torch.cat([inp_dec_level1, out_enc_level1], 1)
+        out_dec_level1 = self.decoder_level1(inp_dec_level1)
+        
+        out_dec_level1 = self.refinement(out_dec_level1)
+
+        #### For Dual-Pixel Defocus Deblurring Task ####
+        if self.dual_pixel_task:
+            out_dec_level1 = out_dec_level1 + self.skip_conv(inp_enc_level1)
+            out_dec_level1 = self.output(out_dec_level1)
+        ###########################
+        else:
+            out_dec_level1 = self.output(out_dec_level1) + inp_img
+
+
+        return out_dec_level1
 
 #---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #NAFNet Module
@@ -155,7 +285,7 @@ class NAFBlock(nn.Module):
     def __init__(self, c, DW_Expand=2, FFN_Expand=2, drop_out_rate=0.):
         super().__init__()
         dw_channel = c * DW_Expand
-        self.conv1 = nn.Conv2d(in_channels=c, out_channels=dw_channel, kernel_size=1, padding=0, stride=1, groups=1, bias=True)
+        self.conv1 = nn.Conv2d(in_channels=c, out_channels=dw_channel, kernel_size=1, padding=0, stride=1, groups=1, bias=True) #
         self.conv2 = nn.Conv2d(in_channels=dw_channel, out_channels=dw_channel, kernel_size=3, padding=1, stride=1, groups=dw_channel,
                                bias=True)
         self.conv3 = nn.Conv2d(in_channels=dw_channel // 2, out_channels=c, kernel_size=1, padding=0, stride=1, groups=1, bias=True)
@@ -209,22 +339,29 @@ class NAFBlock(nn.Module):
 
 class NAFNet(nn.Module):
 
-    def __init__(self, img_channel=3, width=16, middle_blk_num=1, enc_blk_nums=[], dec_blk_nums=[]):
+    def __init__(self, img_channel=3, width=16, middle_blk_num=1, num_head= 1, enc_blk_nums=[], dec_blk_nums=[]):
         super().__init__()
 
-        self.intro = nn.Conv2d(in_channels=img_channel, out_channels=width, kernel_size=3, padding=1, stride=1, groups=1,
-                              bias=True)
-        self.ending = nn.Conv2d(in_channels=width, out_channels=img_channel, kernel_size=3, padding=1, stride=1, groups=1,
-                              bias=True)
 
+        self.intro = nn.Conv2d(in_channels=img_channel, out_channels=width, kernel_size=3, padding=1, stride=1, groups=1,
+                              bias=True)# 3 =>32
+        self.ending = nn.Conv2d(in_channels=width, out_channels=img_channel, kernel_size=3, padding=1, stride=1, groups=1,
+                              bias=True) # 32=>3
+        #enc_blks_nums = [1, 1, 1, 28]
+        #middle_blk_num = 1
+        #dec_blks_nums = [1, 1, 1, 1]
+        #Default Number of Blocks: 36(encoder:33, middle:1, decoder:4)
         self.encoders = nn.ModuleList()
         self.decoders = nn.ModuleList()
         self.middle_blks = nn.ModuleList()
         self.ups = nn.ModuleList()
         self.downs = nn.ModuleList()
-
+        
+        
         chan = width
-        for num in enc_blk_nums:
+
+
+        for num in enc_blk_nums: #[1,1,1,28]
             self.encoders.append(
                 nn.Sequential(
                     *[NAFBlock(chan) for _ in range(num)]
@@ -272,9 +409,9 @@ class NAFNet(nn.Module):
         x = self.middle_blks(x)
 
         for decoder, up, enc_skip in zip(self.decoders, self.ups, encs[::-1]):
-            x = up(x)
-            x = x + enc_skip
-            x = decoder(x)
+            x = up(x) # Upsample
+            x = x + enc_skip #Upsample + Skip Connection
+            x = decoder(x) # Output
 
         x = self.ending(x)
         x = x + inp
@@ -299,31 +436,143 @@ class NAFNetLocal(Local_Base, NAFNet):
         self.eval()
         with torch.no_grad():
             self.convert(base_size=base_size, train_size=train_size, fast_imp=fast_imp)
+#----------------------------------------------------------------------------------------
+#HybridModel
+#----------------------------------------------------------------------------------------
+class HybridNAFNet(nn.Module):
 
-from torchsummary import summary
+    def __init__(self, 
+                 img_channel=3,
+                   width=32, 
+                   middle_blk_num=12, 
+                   enc_blk_nums=[4,2,6], 
+                   dec_blk_nums=[2,2,4], 
+                   refinement=4,
+                   
+                   ):
+        super().__init__()
+
+
+        self.intro = nn.Conv2d(in_channels=img_channel, out_channels=width, kernel_size=3, padding=1, stride=1, groups=1,
+                              bias=True)# 3 =>32
+        self.ending = nn.Conv2d(in_channels=width, out_channels=img_channel, kernel_size=3, padding=1, stride=1, groups=1,
+                              bias=True) # 32=>3
+        #enc_blks_nums = [4,2,6]
+        #middle_blk_num = 12
+        #dec_blks_nums = [4,2,2]
+        #Default Number of Blocks(- refinement): 36(encoder:12, middle:12, decoder:8, refinement:4)
+        #self.encoders = nn.ModuleList()
+        #self.decoders = nn.ModuleList()
+        #self.middle_blks = nn.ModuleList()
+        #self.ups = nn.ModuleList()
+        #self.downs = nn.ModuleList()
+
+        self.encoder_level1 = nn.Sequential(*[TransformerBlock(dim=width, num_heads=num_head, ffn_expansion_factor=ffn_expansion_factor, bias=bias, LayerNorm_type=LayerNorm_type) for i in range(num_blocks[0])])        
+        
+        chan = width
+        for num in enc_blk_nums: #[4,2,6]
+            self.encoders.append(
+                nn.Sequential(
+                    *[NAFBlock(chan) for _ in range(num)]
+                )
+            )
+            self.downs.append(
+                nn.Conv2d(chan, 2*chan, 2, 2)
+            )
+            chan = chan * 2
+
+        self.middle_blks = \
+            nn.Sequential(
+                *[NAFBlock(chan) for _ in range(middle_blk_num)]
+            )
+
+        for num in dec_blk_nums:
+            self.ups.append(
+                nn.Sequential(
+                    nn.Conv2d(chan, chan * 2, 1, bias=False),
+                    nn.PixelShuffle(2)
+                )
+            )
+            chan = chan // 2
+            self.decoders.append(
+                nn.Sequential(
+                    *[NAFBlock(chan) for _ in range(num)]
+                )
+            )
+
+        self.padder_size = 2 ** len(self.encoders)
+
+    def forward(self, inp):
+        B, C, H, W = inp.shape
+        inp = self.check_image_size(inp)
+
+        x = self.intro(inp)
+
+        encs = []
+
+        for encoder, down in zip(self.encoders, self.downs):
+            x = encoder(x)
+            encs.append(x)
+            x = down(x)
+
+        x = self.middle_blks(x)
+
+        for decoder, up, enc_skip in zip(self.decoders, self.ups, encs[::-1]):
+            x = up(x) # Upsample
+            x = x + enc_skip #Upsample + Skip Connection
+            x = decoder(x) # Output
+
+        x = self.ending(x)
+        x = x + inp
+
+        return x[:, :, :H, :W]
+
+    def check_image_size(self, x):
+        _, _, h, w = x.size()
+        mod_pad_h = (self.padder_size - h % self.padder_size) % self.padder_size
+        mod_pad_w = (self.padder_size - w % self.padder_size) % self.padder_size
+        x = F.pad(x, (0, mod_pad_w, 0, mod_pad_h))
+        return x
+
+
+
 if __name__ == '__main__':
     img_channel = 3
     width = 32
 
-    # enc_blks = [2, 2, 4, 8]
+    # enc_blks = [4, 2, 6]
     # middle_blk_num = 12
     # dec_blks = [2, 2, 2, 2]
 
+
+    #Original NAFNet------------------------------------------------------------------------------------------------------------------------------------------------------
     enc_blks = [1, 1, 1, 28]
     middle_blk_num = 1
     dec_blks = [1, 1, 1, 1]
-    
+
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     net = NAFNet(img_channel=img_channel, width=width, middle_blk_num=middle_blk_num,
                       enc_blk_nums=enc_blks, dec_blk_nums=dec_blks)
+    #--------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-    
+
+    #TransNafNet---------------------------------------------------------------------------------------------------------------------------------------------------------
+    #코드 추가 예정
+    #--------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+
+
+    #Model Summary
+    net.to(device)
     inp_shape = (3, 256, 256)
+
+    torchsummary.summary(net,(3, 256, 256))
 
     from ptflops import get_model_complexity_info
 
+    #Model Complexity
     macs, params = get_model_complexity_info(net, inp_shape, verbose=False, print_per_layer_stat=False)
 
     params = float(params[:-3])
     macs = float(macs[:-4])
 
-    print(macs, params)
+    print(f"MACS: {macs}, PARAMS:{params}")

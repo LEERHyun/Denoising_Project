@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from arch_util import LayerNorm2d
 from local_arch import Local_Base
-
+import numbers
 from einops import rearrange
 import torchsummary
 
@@ -448,7 +448,10 @@ class HybridNAFNet(nn.Module):
                    enc_blk_nums=[4,2,6], 
                    dec_blk_nums=[2,2,4], 
                    refinement=4,
-                   
+                   ffn_expansion_factor =2.66,
+                   bias = False,
+                   LayerNorm_type = "WithBias",
+                   heads = 1
                    ):
         super().__init__()
 
@@ -461,32 +464,36 @@ class HybridNAFNet(nn.Module):
         #middle_blk_num = 12
         #dec_blks_nums = [4,2,2]
         #Default Number of Blocks(- refinement): 36(encoder:12, middle:12, decoder:8, refinement:4)
-        #self.encoders = nn.ModuleList()
-        #self.decoders = nn.ModuleList()
-        #self.middle_blks = nn.ModuleList()
-        #self.ups = nn.ModuleList()
-        #self.downs = nn.ModuleList()
+        self.encoders = nn.ModuleList()
+        self.decoders = nn.ModuleList()
+        self.middle_blks = nn.ModuleList()
+        self.ups = nn.ModuleList()
+        self.downs = nn.ModuleList()
 
-        self.encoder_level1 = nn.Sequential(*[TransformerBlock(dim=width, num_heads=num_head, ffn_expansion_factor=ffn_expansion_factor, bias=bias, LayerNorm_type=LayerNorm_type) for i in range(num_blocks[0])])        
+        self.encoder_level1 = nn.Sequential(*[TransformerBlock(dim=width, num_heads=heads, ffn_expansion_factor=ffn_expansion_factor, bias=bias, LayerNorm_type=LayerNorm_type) for i in range(enc_blk_nums[0])])        
         
         chan = width
-        for num in enc_blk_nums: #[4,2,6]
-            self.encoders.append(
+        for i, num in enumerate(enc_blk_nums):#[4,2,6]
+            if i==0:
+                self.encoders.append(nn.Sequential(
+                *[TransformerBlock(dim=chan, 
+                                   num_heads=heads, 
+                                   ffn_expansion_factor=ffn_expansion_factor, 
+                                   bias=bias, 
+                                   LayerNorm_type=LayerNorm_type) 
+                  for i in range(num)]))
+            else:
                 nn.Sequential(
                     *[NAFBlock(chan) for _ in range(num)]
                 )
-            )
             self.downs.append(
                 nn.Conv2d(chan, 2*chan, 2, 2)
             )
             chan = chan * 2
 
-        self.middle_blks = \
-            nn.Sequential(
-                *[NAFBlock(chan) for _ in range(middle_blk_num)]
-            )
+        self.middle_blks = nn.Sequential(*[NAFBlock(chan) for _ in range(middle_blk_num)])
 
-        for num in dec_blk_nums:
+        for i,num in enumerate(dec_blk_nums): #[4,2,2]
             self.ups.append(
                 nn.Sequential(
                     nn.Conv2d(chan, chan * 2, 1, bias=False),
@@ -494,12 +501,26 @@ class HybridNAFNet(nn.Module):
                 )
             )
             chan = chan // 2
-            self.decoders.append(
-                nn.Sequential(
-                    *[NAFBlock(chan) for _ in range(num)]
+            if i==0:
+                self.decoders.append(
+                    nn.Sequential(
+                        *[NAFBlock(chan) for _ in range(num)]
+                    )
                 )
-            )
-
+            else:
+                self.decoders.append(
+                    nn.Sequential(
+                *[TransformerBlock(
+                dim=int(chan), 
+                num_heads=heads, 
+                ffn_expansion_factor=ffn_expansion_factor, 
+                bias=bias, 
+                LayerNorm_type=LayerNorm_type) 
+               for i in range(num)]))
+    
+        self.refinement =nn.Sequential(*[NAFBlock(chan) for _ in range(refinement)])
+                 
+                
         self.padder_size = 2 ** len(self.encoders)
 
     def forward(self, inp):
@@ -521,7 +542,7 @@ class HybridNAFNet(nn.Module):
             x = up(x) # Upsample
             x = x + enc_skip #Upsample + Skip Connection
             x = decoder(x) # Output
-
+        x= self.refinement(x)
         x = self.ending(x)
         x = x + inp
 
@@ -553,19 +574,41 @@ if __name__ == '__main__':
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     net = NAFNet(img_channel=img_channel, width=width, middle_blk_num=middle_blk_num,
                       enc_blk_nums=enc_blks, dec_blk_nums=dec_blks)
+    
+
+    #Model Summary
+    net.to(device)
+    inp_shape = (3, 256, 256)
+
+    torchsummary.summary(net,inp_shape)    
+    
+    #--------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+    #Original Restormer------------------------------------------------------------------------------------------------------------------------------------------------------
+    enc_blks = [1, 1, 1, 28]
+    middle_blk_num = 1
+    dec_blks = [1, 1, 1, 1]
+
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    res = Restormer()
+
+    #Model Summary
+    res.to(device)
+    inp_shape = (3, 128, 128)
+
+    torchsummary.summary(res, inp_shape)    
+    
     #--------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
     #TransNafNet---------------------------------------------------------------------------------------------------------------------------------------------------------
     #코드 추가 예정
     #--------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
+    test = HybridNAFNet()
+    test.to(device)
+    torchsummary.summary(test,(3,256,256))
 
 
-    #Model Summary
-    net.to(device)
-    inp_shape = (3, 256, 256)
-
-    torchsummary.summary(net,(3, 256, 256))
 
     from ptflops import get_model_complexity_info
 

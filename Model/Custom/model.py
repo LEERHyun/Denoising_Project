@@ -182,7 +182,7 @@ class Restormer(nn.Module):
     def __init__(self, 
         inp_channels=3, 
         out_channels=3, 
-        dim = 48,
+        dim = 32,
         num_blocks = [4,6,6,8],  
         num_refinement_blocks = 4,
         heads = [1,2,4,8],
@@ -398,13 +398,12 @@ class NAFNet(nn.Module):
         inp = self.check_image_size(inp)
 
         x = self.intro(inp)
-
         encs = []
 
         for encoder, down in zip(self.encoders, self.downs):
             x = encoder(x)
             encs.append(x)
-            x = down(x)
+            x = down(x)      
 
         x = self.middle_blks(x)
 
@@ -470,7 +469,7 @@ class HybridNAFNet(nn.Module):
         self.ups = nn.ModuleList()
         self.downs = nn.ModuleList()
 
-        self.encoder_level1 = nn.Sequential(*[TransformerBlock(dim=width, num_heads=heads, ffn_expansion_factor=ffn_expansion_factor, bias=bias, LayerNorm_type=LayerNorm_type) for i in range(enc_blk_nums[0])])        
+        #self.encoder_level1 = nn.Sequential(*[TransformerBlock(dim=width, num_heads=heads, ffn_expansion_factor=ffn_expansion_factor, bias=bias, LayerNorm_type=LayerNorm_type) for i in range(enc_blk_nums[0])])        
         
         chan = width
         for i, num in enumerate(enc_blk_nums):#[4,2,6]
@@ -481,10 +480,12 @@ class HybridNAFNet(nn.Module):
                                    ffn_expansion_factor=ffn_expansion_factor, 
                                    bias=bias, 
                                    LayerNorm_type=LayerNorm_type) 
-                  for i in range(num)]))
+                  for _ in range(num)]))
             else:
+                self.encoders.append(
                 nn.Sequential(
                     *[NAFBlock(chan) for _ in range(num)]
+                )
                 )
             self.downs.append(
                 nn.Conv2d(chan, 2*chan, 2, 2)
@@ -526,26 +527,23 @@ class HybridNAFNet(nn.Module):
     def forward(self, inp):
         B, C, H, W = inp.shape
         inp = self.check_image_size(inp)
-
         x = self.intro(inp)
-
         encs = []
-
+        
         for encoder, down in zip(self.encoders, self.downs):
             x = encoder(x)
             encs.append(x)
             x = down(x)
 
         x = self.middle_blks(x)
-
         for decoder, up, enc_skip in zip(self.decoders, self.ups, encs[::-1]):
             x = up(x) # Upsample
             x = x + enc_skip #Upsample + Skip Connection
             x = decoder(x) # Output
+
         x= self.refinement(x)
         x = self.ending(x)
         x = x + inp
-
         return x[:, :, :H, :W]
 
     def check_image_size(self, x):
@@ -580,42 +578,49 @@ if __name__ == '__main__':
     net.to(device)
     inp_shape = (3, 256, 256)
 
-    torchsummary.summary(net,inp_shape)    
+    
+    #torchsummary.summary(net,inp_shape)    
     
     #--------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
     #Original Restormer------------------------------------------------------------------------------------------------------------------------------------------------------
-    enc_blks = [1, 1, 1, 28]
-    middle_blk_num = 1
-    dec_blks = [1, 1, 1, 1]
-
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     res = Restormer()
 
     #Model Summary
     res.to(device)
-    inp_shape = (3, 128, 128)
-
-    torchsummary.summary(res, inp_shape)    
+    #torchsummary.summary(res, inp_shape)    
     
     #--------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
     #TransNafNet---------------------------------------------------------------------------------------------------------------------------------------------------------
-    #코드 추가 예정
-    #--------------------------------------------------------------------------------------------------------------------------------------------------------------------- 
-    test = HybridNAFNet()
-    test.to(device)
-    torchsummary.summary(test,(3,256,256))
+    custom = HybridNAFNet()
+    custom.to(device)
+    #Model Summary
+    #torchsummary.summary(custom,inp_shape)
 
 
 
+    #Calculate Model Complexity---------------------------------------------------------------------------------------------------------------------------------------------------------
     from ptflops import get_model_complexity_info
+    #NAFNet Model Complexity
+    macs, params = get_model_complexity_info(res, inp_shape, verbose=False, print_per_layer_stat=False)
+    params = float(params[:-3])
+    macs = float(macs[:-4])
+    print(f"Restormer MACS: {macs}, PARAMS:{params}")
 
-    #Model Complexity
+
+    #Restormer Model Complexity
     macs, params = get_model_complexity_info(net, inp_shape, verbose=False, print_per_layer_stat=False)
+    params = float(params[:-3])
+    macs = float(macs[:-4])
+    print(f"NAFNet MACS: {macs}, PARAMS:{params}")
+
+    #Custom Model Complexity
+    macs, params = get_model_complexity_info(custom, inp_shape, verbose=False, print_per_layer_stat=False)
 
     params = float(params[:-3])
     macs = float(macs[:-4])
 
-    print(f"MACS: {macs}, PARAMS:{params}")
+    print(f"Custom MACS: {macs}, PARAMS:{params}")
+    

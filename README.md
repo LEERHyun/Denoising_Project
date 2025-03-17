@@ -26,7 +26,9 @@ Refinement:12
 
 추후 진행 사항: 
 
-1. NAFBLock의 Attrntion 모듈 개선(MDTA 활용 예정)
+1. NAFBLock의 Attrntion 모듈 개선~~(MDTA 활용 예정)~~
+
+   - 연산량이 높아져 효율적이지 않으므로, MDTA는 적용하지 않을 예정. 만약 한다면, 다른 Attention 모듈을 찾아볼 것
 
 2. Matlab로 코드를 옮기기 위한 모듈화
 

@@ -339,7 +339,7 @@ class NAFBlock(nn.Module):
 
 class NAFNet(nn.Module):
 
-    def __init__(self, img_channel=3, width=16, middle_blk_num=1, num_head= 1, enc_blk_nums=[], dec_blk_nums=[]):
+    def __init__(self, img_channel=3, width=16, middle_blk_num=1, num_head= 1, enc_blk_nums=[1,1,1,28], dec_blk_nums=[1,1,1,1]):
         super().__init__()
 
 

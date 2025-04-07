@@ -2,7 +2,8 @@ from torch.utils.data import Dataset
 from PIL import Image
 import os
 from torchvision import transforms
-
+import matplotlib.pyplot as plt
+from torch.utils.data import DataLoader
 
 class DenoiseDataset(Dataset):
     def __init__(self, root_dir, transform=None):
@@ -14,8 +15,7 @@ class DenoiseDataset(Dataset):
         self.image_pairs = []
         self.transform = transforms.Compose([
         transforms.Resize((256, 256)),  # resize
-        transforms.ToTensor(),         # totensor
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))  # Normalization
+        transforms.ToTensor()         # totensor 
         ])
         for image_folder in os.listdir(root_dir):
             image_folder_path = os.path.join(root_dir, image_folder)
@@ -37,7 +37,7 @@ class DenoiseDataset(Dataset):
         return len(self.image_pairs)
         
     def __getitem__(self, idx):
-        noisy_path,gt_path = self.image_pairs[idx]
+        gt_path,noisy_path = self.image_pairs[idx]
             
         noisy_img = Image.open(noisy_path).convert("RGB")
         gt_img = Image.open(gt_path).convert("RGB")
@@ -47,3 +47,4 @@ class DenoiseDataset(Dataset):
             gt_img = self.transform(gt_img)
         
         return noisy_img, gt_img
+    

@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 # 1. 모델 불러오기 (모델 클래스 정의 필요)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = HybridNAFNet()  # 모델 클래스 인스턴스 생성
-checkpoint = torch.load("hybrid_model.pth", map_location=device, weights_only=True)
+checkpoint = torch.load(r"C:\Users\Ahhyun\Desktop\Workplace\Model\nafnet.pth", map_location=device, weights_only=True)
 model.load_state_dict(checkpoint)
 model.to(device)
 model.eval()
@@ -27,18 +27,19 @@ def preprocess_image(image_path):
     image = transform(image).unsqueeze(0)  # 배치 차원 추가
     return image.to(device)
 
-image_path = r"C:\Users\User\Desktop\Work\Code\Images\NOISY_SRGB_010.png"  # 테스트할 이미지 경로
+image_path = r"C:\Users\Ahhyun\Desktop\Workplace\TestImage\NOISY_SRGB_010.png" # 테스트할 이미지 경로
 input_tensor = preprocess_image(image_path)
 
-original_image_path = r"C:\Users\User\Desktop\Work\Code\Images\GT_SRGB_010.png"
+original_image_path = r"C:\Users\Ahhyun\Desktop\Workplace\TestImage\GT_SRGB_010.png"
 original_image = Image.open(original_image_path).convert("RGB")
 
 with torch.no_grad():  # 기울기 계산 비활성화
     output = model(input_tensor) 
 
 def postprocess_image(tensor):
-    tensor = tensor.squeeze(0).cpu()  # 배치 차원 제거 및 CPU로 이동
-    return transforms.ToPILImage()(tensor)
+    tensor = tensor.squeeze(0).cpu()
+    transforms.Resize((256,256))(tensor)
+    return     transforms.ToPILImage()(tensor)
 
 # 이미지 후처리
 input_image = postprocess_image(input_tensor)

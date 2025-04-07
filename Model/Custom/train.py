@@ -61,6 +61,7 @@ checkpoint_dir = r"C:\Users\Ahhyun\Desktop\Workplace\Code\Denoising_Project-main
 
 #PSNR
 def calculate_psnr(img1, img2):
+    "img1 ,img2 range [0,1]"
     mse = torch.mean((img1 - img2) ** 2)
     if mse == 0:
         return 100

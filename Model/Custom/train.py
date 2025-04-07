@@ -14,7 +14,7 @@ import lr_scheduler
 import os
 from model import NAFNet
 
-
+#Model 개요
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 model = HybridNAFNet()
 naf = NAFNet()

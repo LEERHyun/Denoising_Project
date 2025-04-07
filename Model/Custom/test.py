@@ -4,7 +4,7 @@ from PIL import Image
 from model import HybridNAFNet
 import matplotlib.pyplot as plt
 
-# 1. 모델 불러오기 (모델 클래스 정의 필요)
+# 모델 정의
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = HybridNAFNet()  # 모델 클래스 인스턴스 생성
 checkpoint = torch.load(r"C:\Users\Ahhyun\Desktop\Workplace\Model\nafnet.pth", map_location=device, weights_only=True)
@@ -19,7 +19,7 @@ torchsummary.summary(model,inp_shape)
 
 def preprocess_image(image_path):
     transform = transforms.Compose([
-        transforms.Resize((256, 256)),  # 원하는 크기로 조정
+        transforms.Resize((256, 256)), 
         transforms.ToTensor()
     ])
     

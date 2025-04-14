@@ -36,6 +36,10 @@ Refinement:12
 ### Training 코드 추가
 
 
+## 2025/04/14
+### Model Editted version 추가
+
+Encoder와 Decoder의 집합을 분리하여 각 Level별로 모듈을 분리
 
 ----------------------------------------------------------
 

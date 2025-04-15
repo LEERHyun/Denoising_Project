@@ -469,19 +469,19 @@ class HybridNAFNet_Edit(nn.Module):
         chan = chan*2
         
         #Level 2 Encoder
-        self.encoder_level2 = nn.Sequential(*[NAFBlock(chan) for _ in enc_blk_nums[1]])
+        self.encoder_level2 = nn.Sequential(*[NAFBlock(chan) for _ in range(enc_blk_nums[1])])
         self.down2_3 = nn.Conv2d(chan, 2*chan, 2, 2) ## From Level 2 to Level 3
         
         chan = chan*2
         
         #Level 3 Encoder
-        self.encoder_level3 = nn.Sequential(*[NAFBlock(chan) for _ in enc_blk_nums[2]])
+        self.encoder_level3 = nn.Sequential(*[NAFBlock(chan) for _ in range(enc_blk_nums[2])])
         self.down3_4 = nn.Conv2d(chan, 2*chan, 2, 2) ## From Level 3 to Level 4
         
         chan = chan*2
         
         #Middle Block
-        self.middle = nn.Sequential(*[NAFBlock(chan) for _ in middle_blk_num])
+        self.middle = nn.Sequential(*[NAFBlock(chan) for _ in range(middle_blk_num)])
         
         #Level 3 Decoder        
         self.up4_3 = nn.Sequential(nn.Conv2d(chan, chan * 2, 1, bias=False),
@@ -489,7 +489,7 @@ class HybridNAFNet_Edit(nn.Module):
                 ) ## From Level 4 to Level 3
         chan = chan//2
         
-        self.decoder_level3 = nn.Sequential(*[NAFBlock(chan) for _ in dec_blk_nums[2]])
+        self.decoder_level3 = nn.Sequential(*[NAFBlock(chan) for _ in range(dec_blk_nums[2])])
 
         #Level 2 Decoder
         
@@ -499,7 +499,7 @@ class HybridNAFNet_Edit(nn.Module):
         
         chan = chan//2        
         
-        self.decoder_level2 = nn.Sequential(*[NAFBlock(chan) for _ in dec_blk_nums[1]])
+        self.decoder_level2 = nn.Sequential(*[NAFBlock(chan) for _ in range(dec_blk_nums[1])])
         
         #Level 1 Decoder
         self.up2_1 = nn.Sequential(nn.Conv2d(chan, chan * 2, 1, bias=False),
@@ -508,15 +508,16 @@ class HybridNAFNet_Edit(nn.Module):
 
         chan = chan//2
         
-        self.decoder_level1 = nn.Sequential(*[NAFBlock(chan) for _ in dec_blk_nums[0]])
+        self.decoder_level1 = nn.Sequential(*[NAFBlock(chan) for _ in range(dec_blk_nums[0])])
         
         #Refinement
-        self.refinement = nn.Sequential(*[NAFBlock(chan) for _ in refinement])
+        self.refinement = nn.Sequential(*[NAFBlock(chan) for _ in range(refinement)])
         
         #Ending
         self.ending = nn.Conv2d(in_channels=width, out_channels=img_channel, kernel_size=3, padding=1, stride=1, groups=1,
                               bias=True) # 32=>3    
-
+        
+        self.padder_size = 2 ** len(enc_blk_nums)
 
     def forward(self, inp):
         B, C, H, W = inp.shape
@@ -630,6 +631,7 @@ if __name__ == '__main__':
     #TransNafNet---------------------------------------------------------------------------------------------------------------------------------------------------------
     custom = HybridNAFNet_Edit()
     custom.to(device)
+    print(custom)
     #Model Summary
     #torchsummary.summary(custom,inp_shape)
 
@@ -638,7 +640,7 @@ if __name__ == '__main__':
     #Calculate Model Complexity---------------------------------------------------------------------------------------------------------------------------------------------------------
     from ptflops import get_model_complexity_info
     #NAFNet Model Complexity
-    macs, params = get_model_complexity_info(res, inp_shape, verbose=False, print_per_layer_stat=False)
+    """macs, params = get_model_complexity_info(res, inp_shape, verbose=False, print_per_layer_stat=False)
     params = float(params[:-3])
     macs = float(macs[:-4])
     print(f"Restormer MACS: {macs}, PARAMS:{params}")
@@ -648,13 +650,16 @@ if __name__ == '__main__':
     macs, params = get_model_complexity_info(net, inp_shape, verbose=False, print_per_layer_stat=False)
     params = float(params[:-3])
     macs = float(macs[:-4])
-    print(f"NAFNet MACS: {macs}, PARAMS:{params}")
+    print(f"NAFNet MACS: {macs}, PARAMS:{params}")"""
 
     #Custom Model Complexity
-    macs, params = get_model_complexity_info(custom, inp_shape, verbose=False, print_per_layer_stat=False)
+    #macs, params = get_model_complexity_info(custom, inp_shape, verbose=False, print_per_layer_stat=False)
 
-    params = float(params[:-3])
-    macs = float(macs[:-4])
+    #params = float(params[:-3])
+    #macs = float(macs[:-4])
 
-    print(f"Custom MACS: {macs}, PARAMS:{params}")
+    torchsummary.summary(custom,inp_shape)
+
+
+    #print(f"Custom MACS: {macs}, PARAMS:{params}")
     

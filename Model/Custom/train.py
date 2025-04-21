@@ -13,20 +13,21 @@ from torch.utils.data import DataLoader
 import lr_scheduler
 import os
 from model import NAFNet
+import glob
 
-#Model 개요
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 model = HybridNAFNet()
 naf = NAFNet()
 model.to(device)
 naf.to(device)
 inp_shape = (3,256,256)
-macs, params = get_model_complexity_info(model, inp_shape, verbose=False, print_per_layer_stat=False)
-params = float(params[:-3])
-macs = float(macs[:-4])
-torchsummary.summary(model,inp_shape)
+#macs, params = get_model_complexity_info(model, inp_shape, verbose=False, print_per_layer_stat=False)
+#params = float(params[:-3])
+#macs = float(macs[:-4])
+#torchsummary.summary(model,inp_shape)
 
-print(f"Custom MACS: {macs}, PARAMS:{params}")
+#print(f"Custom MACS: {macs}, PARAMS:{params}")
 
 #Init Dataset
 dataset_dir = r"C:\Users\Ahhyun\Desktop\Workplace\Dataset\Patched_Dataset"  
@@ -36,7 +37,6 @@ dataset = DenoiseDataset(root_dir=dataset_dir, transform=None)
 
 
 #split Data
-batch_size = 16
 data_size = len(dataset)
 train_size = int(0.8*data_size)
 val_size = int(0.1*data_size)
@@ -45,7 +45,7 @@ test_size = data_size - train_size - val_size
 from torch.utils.data import random_split
 train_dataset, test_dataset, val_dataset = random_split(dataset, [train_size,test_size,val_size])
 
-batch_size = 2
+batch_size = 4
 train_loader = DataLoader(train_dataset, batch_size=batch_size,shuffle=True)
 test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=True)
@@ -68,9 +68,34 @@ def calculate_psnr(img1, img2):
     psnr = 20 * torch.log10(1.0 / torch.sqrt(mse))
     return psnr.item()
 
+#Checkpoint 여부
+use_checkpoint = input("체크포인트를 불러올까요? (y/n): ").strip().lower() == 'y'
 
 
-for epoch in tqdm(range(num_epochs), desc="Training Progress"):
+#Load Checkpoint
+checkpoint_dir = r'C:\Users\Ahhyun\Desktop\Workplace\Code\Denoising_Project-main\Model\Custom\checkpoint'
+checkpoint_pattern = os.path.join(checkpoint_dir, 'checkpoint_*.pth')
+
+if use_checkpoint:
+    checkpoint_files = glob.glob(checkpoint_pattern)
+    if checkpoint_files:
+        # 가장 최근에 수정된 체크포인트 파일 선택
+        latest_ckpt = max(checkpoint_files, key=os.path.getmtime)
+        print(f"Load Checkpoint: {latest_ckpt}")
+
+        checkpoint = torch.load(latest_ckpt, weights_only = True)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        start_epoch = checkpoint['epoch'] + 1
+        print(f"Start with {start_epoch}.")
+    else:
+        print("No Checkpoint file Found. Start with new file")
+        start_epoch = 0
+else:
+    print("Start with new file")
+    start_epoch = 0
+
+for epoch in tqdm(range(start_epoch,num_epochs), desc="Training Progress"):
     train_loss = 0
     
     for noisy_images, gt_images in tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}"):
@@ -105,7 +130,7 @@ for epoch in tqdm(range(num_epochs), desc="Training Progress"):
     scheduler.step()
     
     # Checkpoint 저장 
-    if (epoch + 1) % 5 == 0:
+    if (epoch + 1) % 4 == 0:
         checkpoint_path = os.path.join(checkpoint_dir,f'checkpoint_{epoch+1}.pth')
         checkpoint = {
             'epoch': epoch + 1,
@@ -115,7 +140,6 @@ for epoch in tqdm(range(num_epochs), desc="Training Progress"):
         }
         torch.save(checkpoint, checkpoint_path)
         print(f"Checkpoint saved at Epoch {epoch+1}")
-    torch.save(model.state_dict(), "hybrid_model.pth")
 
 
 torch.save(model.state_dict(), "hybrid_model.pth")

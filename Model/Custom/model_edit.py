@@ -508,7 +508,7 @@ class HybridNAFNet_Edit(nn.Module):
 
         chan = chan//2
         
-        self.decoder_level1 = nn.Sequential(*[NAFBlock(chan) for _ in range(dec_blk_nums[0])])
+        self.decoder_level1 = nn.Sequential(*[TransformerBlock(dim=chan, num_heads=heads, ffn_expansion_factor=ffn_expansion_factor, bias=bias, LayerNorm_type=LayerNorm_type) for i in range(dec_blk_nums[0])])
         
         #Refinement
         self.refinement = nn.Sequential(*[NAFBlock(chan) for _ in range(refinement)])

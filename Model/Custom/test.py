@@ -87,7 +87,7 @@ with torch.no_grad():
             total_lpips += lpips_val
             count += 1
 
-# 전체 성능 계산산
+
 avg_psnr = total_psnr / count
 avg_ssim = total_ssim / count
 avg_lpips = total_lpips / count

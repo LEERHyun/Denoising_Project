@@ -4,10 +4,10 @@ from PIL import Image
 from model import HybridNAFNet, NAFNet
 import matplotlib.pyplot as plt
 
-# 1. 모델 불러오기 (모델 클래스 정의 필요)
+# Load Model
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = HybridNAFNet(middle_blk_num=12,enc_blk_nums=[4,2,6],dec_blk_nums=[2,2,4],refinement=4) 
-#model = HybridNAFNet() # 모델 클래스 인스턴스 생성
+#model = HybridNAFNet()
 #model = NAFNet()
 checkpoint = torch.load(r"C:\Users\Ahhyun\Desktop\Workplace\Model\hybrid_model_36.pth", map_location=device, weights_only=True)
 model.load_state_dict(checkpoint)

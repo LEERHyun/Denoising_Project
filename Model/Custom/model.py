@@ -442,11 +442,12 @@ class HybridNAFNet(nn.Module):
 
     def __init__(self, 
                  img_channel=3,
+                 out_channel = 3,
                    width=32, 
-                   middle_blk_num=12, 
-                   enc_blk_nums=[4,2,6], 
-                   dec_blk_nums=[2,2,4], 
-                   refinement=4,
+                   middle_blk_num=6, 
+                   enc_blk_nums=[2,1,3], 
+                   dec_blk_nums=[2,1,1], 
+                   refinement=2,
                    ffn_expansion_factor =2.66,
                    bias = False,
                    LayerNorm_type = "WithBias",
@@ -457,7 +458,7 @@ class HybridNAFNet(nn.Module):
 
         self.intro = nn.Conv2d(in_channels=img_channel, out_channels=width, kernel_size=3, padding=1, stride=1, groups=1,
                               bias=True)# 3 =>32
-        self.ending = nn.Conv2d(in_channels=width, out_channels=img_channel, kernel_size=3, padding=1, stride=1, groups=1,
+        self.ending = nn.Conv2d(in_channels=width, out_channels=out_channel, kernel_size=3, padding=1, stride=1, groups=1,
                               bias=True) # 32=>3
         #enc_blks_nums = [4,2,6]
         #middle_blk_num = 12
@@ -594,7 +595,7 @@ if __name__ == '__main__':
 
 
     #TransNafNet---------------------------------------------------------------------------------------------------------------------------------------------------------
-    custom = HybridNAFNet()
+    custom = HybridNAFNet(img_channel=1)
     custom.to(device)
     #Model Summary
     #torchsummary.summary(custom,inp_shape)
@@ -604,21 +605,23 @@ if __name__ == '__main__':
     #Calculate Model Complexity---------------------------------------------------------------------------------------------------------------------------------------------------------
     from ptflops import get_model_complexity_info
     #NAFNet Model Complexity
-    macs, params = get_model_complexity_info(res, inp_shape, verbose=False, print_per_layer_stat=False)
-    params = float(params[:-3])
-    macs = float(macs[:-4])
-    print(f"Restormer MACS: {macs}, PARAMS:{params}")
+    #macs, params = get_model_complexity_info(res, inp_shape, verbose=False, print_per_layer_stat=False)
+    #params = float(params[:-3])
+    #macs = float(macs[:-4])
+    #print(f"Restormer MACS: {macs}, PARAMS:{params}")
 
 
     #Restormer Model Complexity
-    macs, params = get_model_complexity_info(net, inp_shape, verbose=False, print_per_layer_stat=False)
-    params = float(params[:-3])
-    macs = float(macs[:-4])
-    print(f"NAFNet MACS: {macs}, PARAMS:{params}")
+    #macs, params = get_model_complexity_info(net, inp_shape, verbose=False, print_per_layer_stat=False)
+    #params = float(params[:-3])
+    #macs = float(macs[:-4])
+    #print(f"NAFNet MACS: {macs}, PARAMS:{params}")
+    
 
     #Custom Model Complexity
-    macs, params = get_model_complexity_info(custom, inp_shape, verbose=False, print_per_layer_stat=False)
-
+    inp_shape = (3, 256, 256)
+    macs, params = get_model_complexity_info(custom, (1,256,256), verbose=False, print_per_layer_stat=False)
+    torchsummary.summary(res, inp_shape)   
     params = float(params[:-3])
     macs = float(macs[:-4])
 

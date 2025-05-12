@@ -443,10 +443,10 @@ class HybridNAFNet_Edit(nn.Module):
     def __init__(self, 
                  img_channel=3,
                    width=32, 
-                   middle_blk_num=12, 
-                   enc_blk_nums=[4,2,6], 
-                   dec_blk_nums=[2,2,4], 
-                   refinement=4,
+                   middle_blk_num = 6, 
+                   enc_blk_nums=[3,1,3], 
+                   dec_blk_nums=[2,1,1], 
+                   refinement=2,
                    ffn_expansion_factor =2.66,
                    bias = False,
                    LayerNorm_type = "WithBias",
@@ -631,7 +631,6 @@ if __name__ == '__main__':
     #TransNafNet---------------------------------------------------------------------------------------------------------------------------------------------------------
     custom = HybridNAFNet_Edit()
     custom.to(device)
-    print(custom)
     #Model Summary
     #torchsummary.summary(custom,inp_shape)
 
@@ -653,13 +652,13 @@ if __name__ == '__main__':
     print(f"NAFNet MACS: {macs}, PARAMS:{params}")"""
 
     #Custom Model Complexity
-    #macs, params = get_model_complexity_info(custom, inp_shape, verbose=False, print_per_layer_stat=False)
+    macs, params = get_model_complexity_info(custom, inp_shape, verbose=False, print_per_layer_stat=False)
 
-    #params = float(params[:-3])
-    #macs = float(macs[:-4])
+    params = float(params[:-3])
+    macs = float(macs[:-4])
 
     torchsummary.summary(custom,inp_shape)
 
 
-    #print(f"Custom MACS: {macs}, PARAMS:{params}")
+    print(f"Custom MACS: {macs}, PARAMS:{params}")
     

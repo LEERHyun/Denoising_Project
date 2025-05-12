@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 
 class SIDD(Dataset):
-    def __init__(self, root_dir = r"C:\Users\Ahhyun\Desktop\Workplace\Dataset\SIDD_Patched_Dataset", transform=None):
+    def __init__(self, root_dir = None, transform=None):
         #root-dir: Root Directory of Dataset
         #transform(callable, optional): transform
             
@@ -29,7 +29,6 @@ class SIDD(Dataset):
 
                 gt_path = os.path.join(patch_folder_path, "GT_SRGB_010.png")
                 noisy_path = os.path.join(patch_folder_path, "NOISY_SRGB_010.png")
-                # GT 및 노이즈 이미지가 모두 있는 경우만
                 if os.path.exists(gt_path) and os.path.exists(noisy_path):
                     self.image_pairs.append((gt_path, noisy_path))
                     
@@ -49,7 +48,7 @@ class SIDD(Dataset):
         return noisy_img, gt_img
 
 class SIDD_Medium(Dataset):
-    def __init__(self, root_dir = r"C:\Users\Ahhyun\Desktop\Workplace\Dataset\SIDD_Patched_Dataset", transform=None):
+    def __init__(self, root_dir = None, transform=None):
         #root-dir: Root Directory of Dataset
         #transform(callable, optional): transform
             
@@ -75,7 +74,6 @@ class SIDD_Medium(Dataset):
                 
                 gt_path_2 = os.path.join(patch_folder_path, "GT_SRGB_011.png")
                 noisy_path_2 = os.path.join(patch_folder_path, "NOISY_SRGB_011.png")
-                # GT 및 노이즈 이미지가 모두 있는 경우만
                 if os.path.exists(gt_path_1) and os.path.exists(noisy_path_1):
                     self.image_pairs.append((gt_path_1, noisy_path_1))
                     
@@ -98,7 +96,7 @@ class SIDD_Medium(Dataset):
     
 
 class RENOIR(Dataset):
-    def __init__(self, root_dir = r"C:\Users\Ahhyun\Desktop\Workplace\Dataset\RENOIR_Patched_Dataset", transform=None):
+    def __init__(self, root_dir = None, transform=None):
         self.root_dir = root_dir
         self.image_pairs = []        
         self.transform = transforms.Compose([        
@@ -119,7 +117,6 @@ class RENOIR(Dataset):
 
                 gt_path = os.path.join(patch_folder_path, "Reference.bmp")
                 noisy_path = os.path.join(patch_folder_path, "Noisy.bmp")
-                # GT 및 노이즈 이미지가 모두 있는 경우만
                 if os.path.exists(gt_path) and os.path.exists(noisy_path):
                     self.image_pairs.append((gt_path, noisy_path))
 
@@ -135,11 +132,11 @@ class RENOIR(Dataset):
             gt_img = self.transform(gt_img)
             noisy_img = self.transform(noisy_img)
 
-        return noisy_img, gt_img  # 입력: noisy, 타깃: reference
+        return noisy_img, gt_img 
 
 
 class PolyUDataset(Dataset):
-    def __init__(self, root_dir = r"C:\Users\Ahhyun\Desktop\Workplace\Dataset\PolyU_Patched", transform=None):
+    def __init__(self, root_dir = None, transform=None):
         #root-dir: Root Directory of Dataset
         #transform(callable, optional): transform
             
@@ -147,8 +144,8 @@ class PolyUDataset(Dataset):
         self.transform = transform
         self.image_pairs = []
         self.transform = transforms.Compose([
-        transforms.Resize((256, 256)),  # resize
-        transforms.ToTensor()         # totensor 
+        transforms.Resize((256, 256)), 
+        transforms.ToTensor()        
         ])
         for image_folder in os.listdir(root_dir):
             image_folder_path = os.path.join(root_dir, image_folder)
@@ -162,7 +159,6 @@ class PolyUDataset(Dataset):
 
                 gt_path = os.path.join(patch_folder_path, "groundtruth.jpg")
                 noisy_path = os.path.join(patch_folder_path, "noisy.jpg")
-                # GT 및 노이즈 이미지가 모두 있는 경우만
                 if os.path.exists(gt_path) and os.path.exists(noisy_path):
                     self.image_pairs.append((gt_path, noisy_path))
                     
@@ -182,7 +178,7 @@ class PolyUDataset(Dataset):
         return noisy_img, gt_img
 
 class RENOIR(Dataset):
-    def __init__(self, root_dir = r"C:\Users\Ahhyun\Desktop\Workplace\Dataset\RENOIR_Patched_Dataset", transform=None):
+    def __init__(self, root_dir =None, transform=None):
         self.root_dir = root_dir
         self.image_pairs = []        
         self.transform = transforms.Compose([        
@@ -203,7 +199,7 @@ class RENOIR(Dataset):
 
                 gt_path = os.path.join(patch_folder_path, "Reference.bmp")
                 noisy_path = os.path.join(patch_folder_path, "Noisy.bmp")
-                # GT 및 노이즈 이미지가 모두 있는 경우만
+
                 if os.path.exists(gt_path) and os.path.exists(noisy_path):
                     self.image_pairs.append((gt_path, noisy_path))
 
@@ -219,11 +215,11 @@ class RENOIR(Dataset):
             gt_img = self.transform(gt_img)
             noisy_img = self.transform(noisy_img)
 
-        return noisy_img, gt_img  # 입력: noisy, 타깃: reference
+        return noisy_img, gt_img  
 
 
 class DnD(Dataset):
-    def __init__(self, root_dir = r"C:\Users\Ahhyun\Desktop\Workplace\Dataset\PolyU_Patched", transform=None):
+    def __init__(self, root_dir = None, transform=None):
         #root-dir: Root Directory of Dataset
         #transform(callable, optional): transform
             
@@ -246,7 +242,6 @@ class DnD(Dataset):
 
                 gt_path = os.path.join(patch_folder_path, "groundtruth.jpg")
                 noisy_path = os.path.join(patch_folder_path, "noisy.jpg")
-                # GT 및 노이즈 이미지가 모두 있는 경우만
                 if os.path.exists(gt_path) and os.path.exists(noisy_path):
                     self.image_pairs.append((gt_path, noisy_path))
                     
@@ -268,7 +263,7 @@ class DnD(Dataset):
 
 
 class Custom(Dataset):
-    def __init__(self, root_dir = r"C:\Users\Ahhyun\Desktop\Workplace\Dataset\Custom_Patched", transform=None):
+    def __init__(self, root_dir = None, transform=None):
         #root-dir: Root Directory of Dataset
         #transform(callable, optional): transform
             
@@ -291,7 +286,6 @@ class Custom(Dataset):
 
                 gt_path = os.path.join(patch_folder_path, "gt.bmp")
                 noisy_path = os.path.join(patch_folder_path, "input.bmp")
-                # GT 및 노이즈 이미지가 모두 있는 경우만
                 if os.path.exists(gt_path) and os.path.exists(noisy_path):
                     self.image_pairs.append((gt_path, noisy_path))
                     

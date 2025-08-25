@@ -11,7 +11,7 @@ Middle: NAFBlock(CNN)
 
 Num of Block
 
-Encoder: [4,2,8]
+Encoder: [4,2,6]
 
 Middle:12
 
